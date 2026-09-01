@@ -20,7 +20,12 @@ app.post('/api/shipping', async (req,res) => {
     const { cart, destinationPostalCode } = req.body;
     if (!cep(destinationPostalCode)) return res.status(400).json({ error:'CEP inválido.' });
     const priced = priceCart(cart);
-    const sf = await quoteSuperFrete({ destinationPostalCode, insuranceValueReais: priced.subtotalCents / 100 });
+    const sf = await quoteSuperFrete({
+      destinationPostalCode,
+      insuranceValueReais: priced.subtotalCents / 100,
+      items: priced.items,
+      services: '1,2'
+    });
     const minProd = Number(process.env.PRODUCTION_DAYS_MIN || 2);
     const maxProd = Number(process.env.PRODUCTION_DAYS_MAX || 4);
     const options = normalizeShippingOptions(sf).map(o => ({
@@ -41,7 +46,12 @@ app.post('/api/checkout', async (req,res) => {
     const priced = priceCart(cart);
 
     // Recalcula o frete no servidor: o preço enviado pelo navegador nunca é confiado.
-    const sf = await quoteSuperFrete({ destinationPostalCode: address.cep, insuranceValueReais: priced.subtotalCents/100, services:'1,2' });
+    const sf = await quoteSuperFrete({
+      destinationPostalCode: address.cep,
+      insuranceValueReais: priced.subtotalCents/100,
+      items: priced.items,
+      services:'1,2'
+    });
     const options = normalizeShippingOptions(sf);
     const shipping = options.find(o => String(o.id) === String(selectedShippingId));
     if (!shipping) return res.status(400).json({error:'Modalidade de frete inválida ou indisponível.'});

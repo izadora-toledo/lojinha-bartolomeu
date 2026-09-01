@@ -13,6 +13,7 @@ Documento operacional da versão 1.0. Este arquivo deve ser atualizado sempre qu
 - Adicionar/remover produtos e alterar quantidade.
 - Carrinho persistido no navegador via `localStorage`.
 - Subtotal recalculado a partir do catálogo recebido do servidor.
+- Qualquer alteração de quantidade ou CEP invalida a cotação de frete anterior e exige novo cálculo.
 
 ### Dados de entrega
 - Coleta nome, e-mail, telefone e endereço do comprador.
@@ -22,9 +23,11 @@ Documento operacional da versão 1.0. Este arquivo deve ser atualizado sempre qu
 ### Frete
 - O frontend chama `POST /api/shipping`.
 - O backend recalcula o valor dos produtos e chama a SuperFrete; o token nunca fica no navegador.
-- Peso inicial do pacote: **600 g**, configurável em `.env`.
-- Dimensões iniciais são configuráveis em `.env` e DEVEM ser substituídas pelas dimensões reais da embalagem antes do lançamento.
-- Serviços solicitados inicialmente: PAC e SEDEX.
+- Peso provisório por unidade de caneca: **600 g**, configurável em `.env`.
+- Dimensões provisórias por unidade: **15 × 15 × 15 cm**, também configuráveis em `.env`.
+- Em compras com múltiplas unidades, o backend envia `products[]` com `quantity`, peso e dimensões unitárias para a SuperFrete calcular a acomodação/caixa ideal.
+- Peso e dimensões DEVEM ser substituídos pelos valores reais após testar a embalagem física antes do lançamento.
+- Serviços solicitados inicialmente: PAC (`1`) e SEDEX (`2`).
 - `insurance_value` é sempre igual ao subtotal das mercadorias.
 - `use_insurance_value` é sempre `true`.
 - O seguro/valor declarado não aparece como opcional para o cliente; ele já participa do preço final retornado pela transportadora.
@@ -37,6 +40,7 @@ Documento operacional da versão 1.0. Este arquivo deve ser atualizado sempre qu
 - O checkout é criado na InfinitePay e o comprador é redirecionado para a página de pagamento deles.
 - Dados de cartão NÃO passam pelo servidor da Lojinha.
 - O frete é enviado à InfinitePay como um item separado no checkout.
+- `PUBLIC_BASE_URL` precisa ser uma URL HTTP/HTTPS válida para montar retorno e webhook.
 
 ### Confirmação de pagamento
 - `redirect_url`: o comprador volta para `/obrigado.html`.
@@ -61,7 +65,7 @@ Documento operacional da versão 1.0. Este arquivo deve ser atualizado sempre qu
 **Dados enviados na cotação:**
 - CEP de origem;
 - CEP de destino;
-- peso e dimensões do pacote;
+- lista `products[]` com quantidade, peso e dimensões unitárias;
 - valor declarado da mercadoria;
 - serviços desejados (PAC/SEDEX).
 
@@ -118,14 +122,14 @@ O checkout próprio coleta dados necessários para entrega e comunicação: nome
 
 ## 4. Pendências obrigatórias antes de produção
 1. Definir CEP real de postagem.
-2. Medir caixa real e substituir altura/largura/comprimento do `.env`.
-3. Criar token de Produção da SuperFrete.
-4. Habilitar Checkout Integrado na InfinitePay e informar a InfiniteTag.
-5. Definir domínio/URL HTTPS final e preencher `PUBLIC_BASE_URL`.
-6. Trocar armazenamento JSON por banco persistente caso a hospedagem não ofereça disco persistente.
-7. Criar Política de Privacidade, Trocas/Devoluções, prazo de produção e informações comerciais obrigatórias.
-8. Testar compra completa em ambiente seguro antes de divulgar.
-9. Depois do primeiro lote embalado, conferir se 600 g continua representando o peso real final.
+2. Medir a embalagem real de uma caneca e substituir peso/altura/largura/comprimento do `.env`.
+3. Fazer testes físicos com 2+ canecas e conferir se a caixa ideal retornada pela SuperFrete corresponde à embalagem realmente usada.
+4. Criar token de Produção da SuperFrete.
+5. Habilitar Checkout Integrado na InfinitePay e informar a InfiniteTag.
+6. Definir domínio/URL HTTPS final e preencher `PUBLIC_BASE_URL`.
+7. Trocar armazenamento JSON por banco persistente caso a hospedagem não ofereça disco persistente.
+8. Criar Política de Privacidade, Trocas/Devoluções, prazo de produção e informações comerciais obrigatórias.
+9. Testar compra completa em ambiente seguro antes de divulgar.
 10. Integrar compra/geração de etiqueta da SuperFrete após validar o fluxo de pedidos.
 
 ## 5. Segurança
@@ -135,3 +139,9 @@ O checkout próprio coleta dados necessários para entrega e comunicação: nome
 - Sempre confirmar pagamento antes de iniciar produção.
 - Não armazenar dados de cartão.
 - Manter `.env` fora do Git.
+
+## 6. Testes automatizados
+- `tests/catalog.test.js`: preço/subtotal e itens inválidos.
+- `tests/integrations.test.js`: payloads SuperFrete/InfinitePay e normalização das opções.
+- `tests/storefront.test.js`: tokens visuais essenciais, ausência de prova social fictícia e invalidação de frete antigo.
+- Executar com `npm test`.

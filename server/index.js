@@ -2,12 +2,17 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { CATALOG, priceCart } from './catalog.js';
-import { createOrderId, saveOrder, getOrder } from './store.js';
+import { createOrderId, createOrderNumber, saveOrder, getOrder } from './store.js';
 import { quoteSuperFrete, normalizeShippingOptions, createInfinitePayCheckout, checkInfinitePayPayment } from './integrations.js';
+import { customerStore } from './customer-store.js';
+import { createAuthRouter, createSessionMiddleware, requireCustomer } from './auth-routes.js';
+import { isValidCpf, normalizeBrazilianPhone, normalizeCpf } from './auth-crypto.js';
 
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
+app.use(createSessionMiddleware(customerStore));
+app.use('/api/auth', createAuthRouter({ store: customerStore }));
 app.use(express.static(path.resolve('public'), { extensions:['html'] }));
 
 const cep = v => /^\d{8}$/.test(String(v || '').replace(/\D/g,''));
@@ -33,10 +38,10 @@ app.post('/api/shipping', async (req,res) => {
   } catch (e) { res.status(502).json({ error:e.message }); }
 });
 
-app.post('/api/checkout', async (req,res) => {
+app.post('/api/checkout', requireCustomer, async (req,res) => {
   try {
     const { cart, selectedShippingId, customer, address } = req.body;
-    if (!customer?.name || !customer?.email || !customer?.phone) return res.status(400).json({error:'Dados do comprador incompletos.'});
+    if (!customer?.name || !customer?.phone || !isValidCpf(customer?.cpf)) return res.status(400).json({error:'Preencha nome, telefone e CPF válidos.'});
     if (!requiredAddress(address)) return res.status(400).json({error:'Endereço incompleto.'});
     const priced = priceCart(cart);
 
@@ -47,20 +52,28 @@ app.post('/api/checkout', async (req,res) => {
     if (!shipping) return res.status(400).json({error:'Modalidade de frete inválida ou indisponível.'});
     const shippingCents = Math.round(shipping.price * 100);
 
+    const normalizedCustomer = { name:String(customer.name).trim(), email:req.customer.email, phone:normalizeBrazilianPhone(customer.phone), cpf:normalizeCpf(customer.cpf) };
+    await customerStore.updateCustomer(req.customer.id, normalizedCustomer);
     const order = {
-      id:createOrderId(), status:'awaiting_payment', createdAt:new Date().toISOString(),
+      id:createOrderId(), orderNumber:await createOrderNumber(), status:'awaiting_payment', createdAt:new Date().toISOString(),
       items: priced.items.map(({id,name,priceCents,quantity,lineTotalCents}) => ({id,name,priceCents,quantity,lineTotalCents})),
       subtotalCents:priced.subtotalCents,
       shipping:{ id:shipping.id, name:shipping.name, priceCents:shippingCents, carrierDays:shipping.deliveryTime, insuredValueCents:priced.subtotalCents },
       totalCents:priced.subtotalCents + shippingCents,
-      customer, address
+      customerId:req.customer.id, customer:normalizedCustomer, address
     };
     await saveOrder(order);
-    const checkout = await createInfinitePayCheckout({ order, items:priced.items, shippingCents, customer, address });
+    const checkout = await createInfinitePayCheckout({ order, items:priced.items, shippingCents, customer:normalizedCustomer, address });
     order.checkoutUrl = checkout.url;
     await saveOrder(order);
     res.json({ orderId:order.id, checkoutUrl:checkout.url });
   } catch(e) { res.status(502).json({error:e.message}); }
+});
+
+app.get('/api/orders/me', requireCustomer, async (req,res) => {
+  const { getOrdersByCustomer } = await import('./store.js');
+  const orders = await getOrdersByCustomer(req.customer.id);
+  res.json({ orders:orders.map(order => ({ orderNumber:order.orderNumber || order.id, createdAt:order.createdAt, status:order.status, items:order.items, totalCents:order.totalCents, trackingCode:order.trackingCode })) });
 });
 
 app.get('/api/payment-status', async (req,res) => {

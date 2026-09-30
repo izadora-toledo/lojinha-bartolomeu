@@ -4,21 +4,21 @@ export const CATALOG = Object.freeze({
     name: 'Caneca Café & Caos',
     description: 'Caneca de cerâmica 325 ml — Café & Caos',
     priceCents: 4990,
-    image: '/assets/barto-selfie.png'
+    image: '/assets/caneca-1.png'
   },
   'modo-caos': {
     id: 'modo-caos',
     name: 'Caneca Modo Caos',
     description: 'Caneca de cerâmica 325 ml — Modo Caos',
     priceCents: 4990,
-    image: '/assets/barto-tulipa.png'
+    image: '/assets/caneca-2.png'
   },
   'julgo-silencio': {
     id: 'julgo-silencio',
     name: 'Caneca Julgo em Silêncio',
     description: 'Caneca de cerâmica 325 ml — Julgo em Silêncio',
     priceCents: 4990,
-    image: '/assets/barto-cama.png'
+    image: '/assets/caneca-3.png'
   }
 });
 
